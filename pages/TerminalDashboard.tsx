@@ -192,7 +192,7 @@ interface EconomicEvent {
 }
 
 // Market Hours Component
-const MarketHours: React.FC<{ theme: 'dark' | 'light' }> = ({ theme }) => {
+const MarketHours: React.FC<{ theme: 'dark' | 'light'; timeFormat: '12h' | '24h' }> = ({ theme, timeFormat }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
   
   useEffect(() => {
@@ -240,12 +240,21 @@ const MarketHours: React.FC<{ theme: 'dark' | 'light' }> = ({ theme }) => {
   const { activeSessions, overlap } = getMarketStatus();
   
   const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
-      minute: '2-digit', 
-      second: '2-digit',
-      hour12: false 
-    });
+    if (timeFormat === '24h') {
+      return date.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit',
+        hour12: false 
+      });
+    } else {
+      return date.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit',
+        hour12: true 
+      });
+    }
   };
   
   const getTimeInTimezone = (offset: number) => {
@@ -326,23 +335,35 @@ const MarketHours: React.FC<{ theme: 'dark' | 'light' }> = ({ theme }) => {
         </div>
       )}
       
-      {/* World Clocks */}
+      {/* World Clocks with Session Times */}
       <div className="grid grid-cols-2 gap-3">
         <div className={cn("border rounded-xl p-3", theme === 'dark' ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-200")}>
           <div className="text-[8px] font-black uppercase tracking-wider opacity-40 mb-1">London</div>
           <div className="text-sm font-mono font-bold">{getTimeInTimezone(0)}</div>
+          <div className={cn("text-[7px] uppercase tracking-wider mt-1", theme === 'dark' ? "text-white/30" : "text-slate-400")}>
+            Session: 08:00-17:00
+          </div>
         </div>
         <div className={cn("border rounded-xl p-3", theme === 'dark' ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-200")}>
           <div className="text-[8px] font-black uppercase tracking-wider opacity-40 mb-1">New York</div>
           <div className="text-sm font-mono font-bold">{getTimeInTimezone(-5)}</div>
+          <div className={cn("text-[7px] uppercase tracking-wider mt-1", theme === 'dark' ? "text-white/30" : "text-slate-400")}>
+            Session: 08:00-17:00
+          </div>
         </div>
         <div className={cn("border rounded-xl p-3", theme === 'dark' ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-200")}>
           <div className="text-[8px] font-black uppercase tracking-wider opacity-40 mb-1">Tokyo</div>
           <div className="text-sm font-mono font-bold">{getTimeInTimezone(9)}</div>
+          <div className={cn("text-[7px] uppercase tracking-wider mt-1", theme === 'dark' ? "text-white/30" : "text-slate-400")}>
+            Session: 00:00-09:00
+          </div>
         </div>
         <div className={cn("border rounded-xl p-3", theme === 'dark' ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-200")}>
           <div className="text-[8px] font-black uppercase tracking-wider opacity-40 mb-1">Sydney</div>
           <div className="text-sm font-mono font-bold">{getTimeInTimezone(11)}</div>
+          <div className={cn("text-[7px] uppercase tracking-wider mt-1", theme === 'dark' ? "text-white/30" : "text-slate-400")}>
+            Session: 22:00-07:00
+          </div>
         </div>
       </div>
       
@@ -760,6 +781,7 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [timeFormat, setTimeFormat] = useState<'12h' | '24h'>('12h');
   const [timeFilter, setTimeFilter] = useState<'all' | 'week' | 'month' | 'year'>('all');
   const [dailyGoal, setDailyGoal] = useState<number>(500);
   const [weeklyGoal, setWeeklyGoal] = useState<number>(2500);
@@ -789,12 +811,36 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
 
   const [userId, setUserId] = useState<string | null>(null);
 
+  // Helper function to format time based on user preference
+  const formatTime = (date: Date | string, format: '12h' | '24h' = timeFormat) => {
+    const d = typeof date === 'string' ? new Date(date) : date;
+    if (format === '24h') {
+      return d.toLocaleString('en-US', { 
+        month: 'short', 
+        day: '2-digit', 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: false 
+      }).toUpperCase();
+    } else {
+      return d.toLocaleString('en-US', { 
+        month: 'short', 
+        day: '2-digit', 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: true 
+      }).toUpperCase();
+    }
+  };
+
   useEffect(() => {
     const initTerminal = async () => {
       setIsLoading(true);
       const savedTheme = localStorage.getItem('tradevo_theme');
+      const savedTimeFormat = localStorage.getItem('tradevo_time_format');
       
       if (savedTheme) setTheme(savedTheme as 'dark' | 'light');
+      if (savedTimeFormat) setTimeFormat(savedTimeFormat as '12h' | '24h');
 
       // Load custom tags from localStorage
       const savedTags = localStorage.getItem(TAGS_STORAGE_KEY);
@@ -1317,7 +1363,7 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
     const tradeData: TradeLog = {
       id: editingId || `TRD-${Math.floor(Math.random() * 90000 + 10000)}`,
       timestamp: tradeDate.toISOString(),
-      displayDate: tradeDate.toLocaleString('en-US', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' }).toUpperCase(),
+      displayDate: formatTime(tradeDate, timeFormat),
       symbol: form.symbol,
       assetClass: form.assetClass,
       type: form.type,
@@ -1546,6 +1592,17 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
             </div>
           </div>
           <div className={cn("flex flex-col gap-4 pt-4 border-t", theme === 'dark' ? "border-white/5" : "border-slate-100")}>
+            <button 
+              onClick={() => {
+                const newFormat = timeFormat === '12h' ? '24h' : '12h';
+                setTimeFormat(newFormat);
+                localStorage.setItem('tradevo_time_format', newFormat);
+              }} 
+              className={cn("flex items-center gap-3 py-3 px-2 transition-colors", theme === 'dark' ? "text-white/40 hover:text-[#00ff9c]" : "text-slate-400 hover:text-[#00ff9c]")}
+            >
+              <Clock className="h-5 w-5" />
+              {open && <span className="text-[10px] font-black uppercase tracking-[0.2em]">{timeFormat === '12h' ? '12 Hour' : '24 Hour'}</span>}
+            </button>
             <button 
               onClick={() => {
                 const newTheme = theme === 'dark' ? 'light' : 'dark';
@@ -2374,7 +2431,7 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 
                 {/* Market Hours */}
-                <MarketHours theme={theme} />
+                <MarketHours theme={theme} timeFormat={timeFormat} />
                 
                 {/* Position Size Calculator */}
                 <PositionSizeCalculator theme={theme} />
