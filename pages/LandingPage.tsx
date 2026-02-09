@@ -56,6 +56,7 @@ const LandingPage: React.FC = () => {
     { name: "Intelligence", link: "#features", icon: <Zap className="h-4 w-4" /> },
     { name: "Log Sync", link: "#analytics", icon: <Database className="h-4 w-4" /> },
     { name: "Stats Core", link: "#methodology", icon: <BarChart3 className="h-4 w-4" /> },
+    { name: "Pricing", link: "#pricing", icon: <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#00ff9c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-dollar-sign h-4 w-4"><line x1="12" x2="12" y1="2" y2="22" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>, accent: '#00ff9c' },
   ];
 
   return (
@@ -67,21 +68,17 @@ const LandingPage: React.FC = () => {
           <div className="absolute inset-0 z-0">
             <div className="absolute inset-0 bg-[linear-gradient(rgba(0,255,156,0.03)_1px,transparent_1px)] bg-[size:100%_4px] pointer-events-none"></div>
           </div>
-
           <div className="relative z-10 w-full max-w-7xl mx-auto px-6 text-center reveal transition-all duration-1000 transform opacity-0 translate-y-12">
             <div className="inline-flex items-center gap-3 mb-4 px-5 py-2 border border-[#00ff9c]/40 bg-black/60 rounded-sm backdrop-blur-sm shadow-[0_0_20px_rgba(0,255,156,0.1)]">
               <div className="w-2 h-2 rounded-full bg-[#00ff9c] animate-pulse"></div>
               <span className="text-[#00ff9c] text-[11px] font-bold tracking-[0.5em] uppercase">Operator Terminal Activated</span>
             </div>
-            
             <div className="h-[20rem] md:h-[30rem] w-full flex items-center justify-center -mt-8 md:-mt-16">
               <TextHoverEffect text="TRADEVO" />
             </div>
-            
             <p className="text-xl md:text-2xl text-white/70 max-w-3xl mx-auto -mt-10 md:-mt-20 mb-14 leading-relaxed font-light tracking-wide italic">
               Engineered for high-frequency discipline. Quantify your edge with institutional-grade diagnostics.
             </p>
-
             <div className="flex flex-col sm:flex-row items-center justify-center gap-8">
               <HoverBorderGradient
                 as={Link}
@@ -91,7 +88,6 @@ const LandingPage: React.FC = () => {
               >
                 Initialize
               </HoverBorderGradient>
-              
               <HoverBorderGradient
                 as={Link}
                 to="/login"
@@ -103,13 +99,49 @@ const LandingPage: React.FC = () => {
             </div>
           </div>
         </DotBackground>
-        
         <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-4 text-white/20">
           <span className="text-[10px] uppercase tracking-[0.4em] font-bold">Scroll to Deploy</span>
           <div className="w-px h-16 bg-gradient-to-b from-[#00ff9c] to-transparent"></div>
         </div>
+        {/* Pricing Button at Bottom */}
+        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 flex flex-col items-center w-full z-50">
+          <button
+            className="mt-4 px-8 py-4 rounded-3xl font-black uppercase tracking-widest text-lg bg-black border border-[#00ff9c] text-white shadow-[0_0_20px_#00ff9c] hover:bg-[#00ff9c] hover:text-black transition-all"
+            onClick={() => {
+              const pricingSection = document.getElementById('pricing');
+              if (pricingSection) pricingSection.scrollIntoView({ behavior: 'smooth' });
+            }}
+          >
+            Pricing & Features
+          </button>
+        </div>
       </section>
 
+      {/* Pricing Section moved to bottom of page */}
+      <section id="pricing" className="relative py-24 px-6 bg-black border-b border-white/5">
+        <DotBackground className="py-20" dotColor="#181818">
+          <div className="max-w-7xl mx-auto text-center mb-16">
+            <h2 className="text-5xl md:text-6xl font-black uppercase italic tracking-tighter text-white mb-4">Select Me</h2>
+            <p className="text-white/40 text-lg font-light italic">Choose your plan and unlock advanced analytics, journaling, and trading tools.</p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-12 max-w-5xl mx-auto">
+            {/* Pricing Cards */}
+            {[{title:'Starter',price:'Free',features:['Basic analytics','Trade journal','Position calculator'],accent:'#00ff9c'},{title:'Pro',price:'$19/mo',features:['Advanced analytics','Custom charts','Economic calendar API','Export to CSV'],accent:'#00bfff'},{title:'Elite',price:'$49/mo',features:['All Pro features','Alpha attribution','Drawdown heatmap','Priority support'],accent:'#ff00e6'}].map((plan,idx)=>(
+              <div key={plan.title} className="relative group p-8 rounded-3xl bg-black border-2 shadow-[0_0_40px_rgba(0,255,156,0.15)] flex flex-col items-center transition-all duration-300 border-white/10 hover:border-[var(--accent)]" style={{'--accent':plan.accent}}>
+                <div className="absolute inset-0 rounded-3xl pointer-events-none z-0" style={{boxShadow:`0 0 40px 8px ${plan.accent}33,0 0 0 2px ${plan.accent}`}}></div>
+                <h3 className="text-3xl font-black uppercase tracking-tight mb-2 text-white z-10">{plan.title}</h3>
+                <div className="text-4xl font-black mb-6 z-10" style={{color:plan.accent}}>{plan.price}</div>
+                <ul className="space-y-3 mb-8 z-10">
+                  {plan.features.map(f=>(<li key={f} className="text-white/80 text-sm font-medium flex items-center gap-2"><span className="inline-block w-2 h-2 rounded-full" style={{background:plan.accent}}></span>{f}</li>))}
+                </ul>
+                <button className="mt-auto px-8 py-3 rounded-xl font-black uppercase tracking-widest text-[12px] bg-black border border-[var(--accent)] text-white shadow-[0_0_20px_var(--accent)] hover:bg-[var(--accent)] hover:text-black transition-all z-10">Select</button>
+              </div>
+            ))}
+          </div>
+        </DotBackground>
+      </section>
+    {/* ...existing code... */}
+    
       <section id="features" className="relative min-h-screen w-full flex items-center bg-black border-y border-white/5 overflow-hidden">
         <DotBackground className="min-h-screen flex items-center" dotColor="#202020">
           <div className="relative z-10 max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-20 items-center w-full">
