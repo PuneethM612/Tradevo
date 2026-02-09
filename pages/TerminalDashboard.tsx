@@ -806,7 +806,8 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
     analysis: '',
     date: new Date().toISOString().split('T')[0],
     screenshot: null as string | null,
-    tags: [] as string[]
+    tags: [] as string[],
+    exitType: 'TP' as 'TP' | 'SL' // New field to track if trade hit TP or SL
   });
 
   const [userId, setUserId] = useState<string | null>(null);
@@ -971,19 +972,30 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
     const reward = Math.abs(tp - entry);
     const rr = risk === 0 ? "0.00" : (reward / risk).toFixed(2);
     
+    // Determine exit price based on user selection
+    const exitPrice = form.exitType === 'TP' ? tp : sl;
+    
+    // Calculate profit/loss based on trade type and exit
+    let profitValue = 0;
+    if (form.type === 'LONG') {
+      profitValue = exitPrice - entry; // Positive if TP hit, negative if SL hit
+    } else { // SHORT
+      profitValue = entry - exitPrice; // Positive if TP hit, negative if SL hit
+    }
+    
     let multiplier = 1;
     if (form.assetClass === 'FOREX') multiplier = 10000;
     else if (form.assetClass === 'COMMODITIES') multiplier = 100;
     else if (form.assetClass === 'FUTURES') multiplier = 10;
     else if (form.assetClass === 'CRYPTO') multiplier = 1;
 
-    const profitValue = reward * multiplier * lots;
+    const finalProfit = profitValue * multiplier * lots;
 
     return { 
       rr, 
-      profit: profitValue.toFixed(2) 
+      profit: finalProfit.toFixed(2) 
     };
-  }, [form.entry, form.sl, form.tp, form.lots, form.assetClass]);
+  }, [form.entry, form.sl, form.tp, form.lots, form.assetClass, form.type, form.exitType]);
 
   const stats = useMemo(() => {
     const totalTrades = loggedTrades.length;
@@ -1469,7 +1481,7 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
   const resetForm = () => {
     setForm({
       symbol: 'XAUUSD', assetClass: 'COMMODITIES', type: 'LONG', lots: '0.10', entry: '', sl: '', tp: '',
-      analysis: '', date: new Date().toISOString().split('T')[0], screenshot: null, tags: []
+      analysis: '', date: new Date().toISOString().split('T')[0], screenshot: null, tags: [], exitType: 'TP'
     });
     setEditingId(null);
   };
@@ -2330,6 +2342,31 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
                         <div className="flex gap-4">
                            <InputGroup label="STOP" value={form.sl} type="number" theme={theme} onChange={(v:any) => setForm({...form, sl: v})} />
                            <InputGroup label="TARGET" value={form.tp} type="number" theme={theme} onChange={(v:any) => setForm({...form, tp: v})} />
+                        </div>
+                     </div>
+                     
+                     {/* Exit Type Selection */}
+                     <div className="space-y-3">
+                        <label className="text-[9px] uppercase tracking-[0.3em] font-black opacity-30 ml-2">Trade Result</label>
+                        <div className={cn("flex rounded-2xl p-1.5 border shadow-sm", theme === 'dark' ? "bg-white/5 border-white/10" : "bg-slate-100 border-slate-200")}>
+                           <button 
+                             onClick={() => setForm({...form, exitType: 'TP'})} 
+                             className={cn("flex-1 py-4 rounded-xl text-[10px] font-black uppercase transition-all flex items-center justify-center gap-2", 
+                               form.exitType === 'TP' ? "bg-[#00ff9c] text-black shadow-md" : "opacity-30"
+                             )}
+                           >
+                             <TrendingUp className="w-4 h-4" />
+                             Hit Target (TP)
+                           </button>
+                           <button 
+                             onClick={() => setForm({...form, exitType: 'SL'})} 
+                             className={cn("flex-1 py-4 rounded-xl text-[10px] font-black uppercase transition-all flex items-center justify-center gap-2", 
+                               form.exitType === 'SL' ? "bg-red-600 text-white shadow-md" : "opacity-30"
+                             )}
+                           >
+                             <TrendingDown className="w-4 h-4" />
+                             Hit Stop (SL)
+                           </button>
                         </div>
                      </div>
                   </div>
