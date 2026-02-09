@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tradevo Database Health Check</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background: #000;
+            color: #00ff9c;
+            padding: 40px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-transform: uppercase;
+            letter-spacing: 0.3em;
+            border-bottom: 2px solid #00ff9c;
+            padding-bottom: 20px;
+        }
+        .status {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #333;
+            border-radius: 8px;
+            background: #0a0a0a;
+        }
+        .success { border-color: #00ff9c; }
+        .error { border-color: #ff0055; color: #ff0055; }
+        .warning { border-color: #ffaa00; color: #ffaa00; }
+        button {
+            background: #00ff9c;
+            color: #000;
+            border: none;
+            padding: 15px 30px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            cursor: pointer;
+            margin: 10px 10px 10px 0;
+            border-radius: 4px;
+        }
+        button:hover {
+            background: #00cc7a;
+        }
+        pre {
+            background: #0a0a0a;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            border: 1px solid #333;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #333;
+            border-top-color: #00ff9c;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Tradevo Database Health Check</h1>
+    
+    <div class="status">
+        <h3>Connection Status</h3>
+        <div id="connection-status">Checking...</div>
+    </div>
+
+    <div class="status">
+        <h3>Tables Status</h3>
+        <div id="tables-status">Not checked yet</div>
+    </div>
+
+    <div class="status">
+        <h3>Your Data</h3>
+        <div id="data-status">Not checked yet</div>
+    </div>
+
+    <div>
+        <button onclick="runHealthCheck()">Run Health Check</button>
+        <button onclick="checkAuth()">Check Authentication</button>
+        <button onclick="viewTrades()">View My Trades</button>
+    </div>
+
+    <div id="results"></div>
+
+    <script>
+        const SUPABASE_URL = 'https://wsygyekughkjtxrmcwzq.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndzeWd5ZWt1Z2hranR4cm1jd3pxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA1MDgzMjIsImV4cCI6MjA4NjA4NDMyMn0.t3ir9Hktu_Q26haR2kGcCAQmgWVeYxGiB0DXXl7ba9Q';
+
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        async function runHealthCheck() {
+            const connectionEl = document.getElementById('connection-status');
+            const tablesEl = document.getElementById('tables-status');
+            const dataEl = document.getElementById('data-status');
+
+            // Check connection
+            connectionEl.innerHTML = '<span class="loading"></span> Testing connection...';
+            try {
+                const { data, error } = await supabase.from('profiles').select('count').limit(1);
+                if (error) throw error;
+                connectionEl.innerHTML = '<span style="color: #00ff9c;">✅ Connected to Supabase</span>';
+            } catch (e) {
+                connectionEl.innerHTML = `<span style="color: #ff0055;">❌ Connection failed: ${e.message}</span>`;
+                return;
+            }
+
+            // Check tables
+            tablesEl.innerHTML = '<span class="loading"></span> Checking tables...';
+            const tables = [];
+            
+            try {
+                const { error: profilesError } = await supabase.from('profiles').select('id').limit(1);
+                if (!profilesError) tables.push('✅ profiles');
+                else tables.push(`❌ profiles (${profilesError.message})`);
+            } catch (e) {
+                tables.push(`❌ profiles (${e.message})`);
+            }
+
+            try {
+                const { error: tradesError } = await supabase.from('trades').select('id').limit(1);
+                if (!tradesError) tables.push('✅ trades');
+                else tables.push(`❌ trades (${tradesError.message})`);
+            } catch (e) {
+                tables.push(`❌ trades (${e.message})`);
+            }
+
+            tablesEl.innerHTML = tables.join('<br>');
+
+            // Check user data
+            dataEl.innerHTML = '<span class="loading"></span> Checking your data...';
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (!session) {
+                    dataEl.innerHTML = '<span style="color: #ffaa00;">⚠️ Not logged in. Please log in to Tradevo first.</span>';
+                    return;
+                }
+
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .eq('id', session.user.id)
+                    .single();
+
+                const { data: trades } = await supabase
+                    .from('trades')
+                    .select('*')
+                    .eq('user_id', session.user.id);
+
+                dataEl.innerHTML = `
+                    <span style="color: #00ff9c;">✅ Logged in as: ${session.user.email}</span><br>
+                    <span style="color: #00ff9c;">✅ Profile found: Initial balance = $${profile?.initial_balance || 'Not set'}</span><br>
+                    <span style="color: #00ff9c;">✅ Trades found: ${trades?.length || 0} trades</span>
+                `;
+            } catch (e) {
+                dataEl.innerHTML = `<span style="color: #ff0055;">❌ Error: ${e.message}</span>`;
+            }
+        }
+
+        async function checkAuth() {
+            const resultsEl = document.getElementById('results');
+            resultsEl.innerHTML = '<h3>Authentication Status</h3><span class="loading"></span> Checking...';
+
+            try {
+                const { data: { session }, error } = await supabase.auth.getSession();
+                
+                if (error) throw error;
+
+                if (session) {
+                    resultsEl.innerHTML = `
+                        <h3>Authentication Status</h3>
+                        <div class="status success">
+                            <strong>✅ Authenticated</strong><br><br>
+                            <strong>User ID:</strong> ${session.user.id}<br>
+                            <strong>Email:</strong> ${session.user.email}<br>
+                            <strong>Session expires:</strong> ${new Date(session.expires_at * 1000).toLocaleString()}
+                        </div>
+                    `;
+                } else {
+                    resultsEl.innerHTML = `
+                        <h3>Authentication Status</h3>
+                        <div class="status warning">
+                            <strong>⚠️ Not Authenticated</strong><br><br>
+                            Please log in to Tradevo first, then run this check again.
+                        </div>
+                    `;
+                }
+            } catch (e) {
+                resultsEl.innerHTML = `
+                    <h3>Authentication Status</h3>
+                    <div class="status error">
+                        <strong>❌ Error</strong><br><br>
+                        ${e.message}
+                    </div>
+                `;
+            }
+        }
+
+        async function viewTrades() {
+            const resultsEl = document.getElementById('results');
+            resultsEl.innerHTML = '<h3>Your Trades</h3><span class="loading"></span> Loading...';
+
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                
+                if (!session) {
+                    resultsEl.innerHTML = `
+                        <h3>Your Trades</h3>
+                        <div class="status warning">
+                            <strong>⚠️ Not Authenticated</strong><br><br>
+                            Please log in to Tradevo first.
+                        </div>
+                    `;
+                    return;
+                }
+
+                const { data: trades, error } = await supabase
+                    .from('trades')
+                    .select('*')
+                    .eq('user_id', session.user.id)
+                    .order('timestamp', { ascending: false });
+
+                if (error) throw error;
+
+                if (!trades || trades.length === 0) {
+                    resultsEl.innerHTML = `
+                        <h3>Your Trades</h3>
+                        <div class="status warning">
+                            <strong>⚠️ No Trades Found</strong><br><br>
+                            You haven't logged any trades yet, or they're not being saved to the database.
+                        </div>
+                    `;
+                    return;
+                }
+
+                const tradesHtml = trades.map(t => `
+                    <div style="border: 1px solid #333; padding: 15px; margin: 10px 0; border-radius: 4px;">
+                        <strong>${t.symbol}</strong> ${t.type} | 
+                        Profit: <span style="color: ${parseFloat(t.profit) >= 0 ? '#00ff9c' : '#ff0055'}">$${t.profit}</span> | 
+                        R:R: ${t.rr} | 
+                        Date: ${new Date(t.timestamp).toLocaleString()}<br>
+                        <small style="opacity: 0.5;">ID: ${t.id}</small>
+                    </div>
+                `).join('');
+
+                resultsEl.innerHTML = `
+                    <h3>Your Trades (${trades.length} total)</h3>
+                    <div class="status success">
+                        ${tradesHtml}
+                    </div>
+                `;
+            } catch (e) {
+                resultsEl.innerHTML = `
+                    <h3>Your Trades</h3>
+                    <div class="status error">
+                        <strong>❌ Error</strong><br><br>
+                        ${e.message}
+                    </div>
+                `;
+            }
+        }
+
+        // Run health check on load
+        window.addEventListener('load', runHealthCheck);
+    </script>
+</body>
+</html>

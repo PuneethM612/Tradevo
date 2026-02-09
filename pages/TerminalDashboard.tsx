@@ -637,8 +637,18 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
       // Load custom tags from localStorage
       const savedTags = localStorage.getItem(TAGS_STORAGE_KEY);
       if (savedTags) {
-        setCustomTags(JSON.parse(savedTags));
+        try {
+          setCustomTags(JSON.parse(savedTags));
+        } catch (e) {
+          console.error('Error parsing tags:', e);
+        }
       }
+
+      // Load goals from localStorage
+      const savedWeeklyGoal = localStorage.getItem('tradevo_weekly_goal');
+      const savedMonthlyGoal = localStorage.getItem('tradevo_monthly_goal');
+      if (savedWeeklyGoal) setWeeklyGoal(Number(savedWeeklyGoal));
+      if (savedMonthlyGoal) setMonthlyGoal(Number(savedMonthlyGoal));
 
       if (isConfigured) {
         try {
@@ -648,25 +658,32 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
             setIsSyncing(true);
             
             // Fetch user profile with initial balance
-            const { data: profile } = await supabase
+            const { data: profile, error: profileError } = await supabase
               .from('profiles')
               .select('initial_balance')
               .eq('id', session.user.id)
               .single();
             
-            if (profile?.initial_balance) {
+            if (profileError) {
+              console.error('Error fetching profile:', profileError);
+            } else if (profile?.initial_balance) {
               setInitialBalance(profile.initial_balance);
             }
             
             // Fetch user's trades
-            const { data: trades } = await supabase
+            const { data: trades, error: tradesError } = await supabase
               .from('trades')
               .select('*')
               .eq('user_id', session.user.id)
               .order('timestamp', { ascending: false });
             
-            if (trades && trades.length > 0) {
+            if (tradesError) {
+              console.error('Error fetching trades:', tradesError);
+            } else if (trades && trades.length > 0) {
+              console.log(`Loaded ${trades.length} trades from database`);
               setLoggedTrades(trades);
+            } else {
+              console.log('No trades found in database');
             }
             
             setLastSyncTime(new Date().toLocaleTimeString());
@@ -1234,11 +1251,21 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
             </div>
           </div>
           <div className={cn("flex flex-col gap-4 pt-4 border-t", theme === 'dark' ? "border-white/5" : "border-slate-100")}>
-            <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="flex items-center gap-3 py-3 px-2 text-white/40 hover:text-[#00ff9c]">
+            <button 
+              onClick={() => {
+                const newTheme = theme === 'dark' ? 'light' : 'dark';
+                setTheme(newTheme);
+                localStorage.setItem('tradevo_theme', newTheme);
+              }} 
+              className={cn("flex items-center gap-3 py-3 px-2 transition-colors", theme === 'dark' ? "text-white/40 hover:text-[#00ff9c]" : "text-slate-400 hover:text-[#00ff9c]")}
+            >
               {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
               {open && <span className="text-[10px] font-black uppercase tracking-[0.2em]">{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>}
             </button>
-            <button onClick={onLogout} className="flex items-center gap-3 py-3 px-2 text-white/40 hover:text-red-500">
+            <button 
+              onClick={onLogout} 
+              className={cn("flex items-center gap-3 py-3 px-2 transition-colors hover:text-red-500", theme === 'dark' ? "text-white/40" : "text-slate-400")}
+            >
               <LogOut className="h-5 w-5" />
               {open && <span className="text-[10px] font-black uppercase tracking-[0.2em]">Deauthorize</span>}
             </button>
@@ -2111,7 +2138,11 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
               </div>
 
               <button
-                onClick={() => setShowGoalModal(false)}
+                onClick={() => {
+                  localStorage.setItem('tradevo_weekly_goal', String(weeklyGoal));
+                  localStorage.setItem('tradevo_monthly_goal', String(monthlyGoal));
+                  setShowGoalModal(false);
+                }}
                 className="w-full bg-[#00ff9c] text-black py-4 rounded-xl font-black uppercase tracking-widest text-[11px]"
               >
                 Save Goals
