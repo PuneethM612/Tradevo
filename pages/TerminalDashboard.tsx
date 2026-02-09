@@ -191,6 +191,168 @@ interface EconomicEvent {
   previous?: string;
 }
 
+// Market Hours Component
+const MarketHours: React.FC<{ theme: 'dark' | 'light' }> = ({ theme }) => {
+  const [currentTime, setCurrentTime] = useState(new Date());
+  
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+  
+  const getMarketStatus = () => {
+    const utcHours = currentTime.getUTCHours();
+    const utcMinutes = currentTime.getUTCMinutes();
+    const totalMinutes = utcHours * 60 + utcMinutes;
+    
+    // Market sessions in UTC
+    const sessions = [
+      { name: 'Sydney', start: 22 * 60, end: 7 * 60, color: '#3b82f6', emoji: '🇦🇺' },
+      { name: 'Tokyo', start: 0 * 60, end: 9 * 60, color: '#ef4444', emoji: '🇯🇵' },
+      { name: 'London', start: 8 * 60, end: 17 * 60, color: '#10b981', emoji: '🇬🇧' },
+      { name: 'New York', start: 13 * 60, end: 22 * 60, color: '#f59e0b', emoji: '🇺🇸' }
+    ];
+    
+    const activeSessions = sessions.filter(session => {
+      if (session.start > session.end) {
+        // Session crosses midnight
+        return totalMinutes >= session.start || totalMinutes < session.end;
+      }
+      return totalMinutes >= session.start && totalMinutes < session.end;
+    });
+    
+    // Check for overlaps
+    const londonActive = activeSessions.some(s => s.name === 'London');
+    const nyActive = activeSessions.some(s => s.name === 'New York');
+    const tokyoActive = activeSessions.some(s => s.name === 'Tokyo');
+    const sydneyActive = activeSessions.some(s => s.name === 'Sydney');
+    
+    let overlap = null;
+    if (londonActive && nyActive) overlap = { name: 'London/NY Overlap', color: '#00ff9c', high: true };
+    else if (londonActive && tokyoActive) overlap = { name: 'Tokyo/London Overlap', color: '#8b5cf6', high: false };
+    else if (sydneyActive && tokyoActive) overlap = { name: 'Sydney/Tokyo Overlap', color: '#06b6d4', high: false };
+    
+    return { activeSessions, overlap };
+  };
+  
+  const { activeSessions, overlap } = getMarketStatus();
+  
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit', 
+      second: '2-digit',
+      hour12: false 
+    });
+  };
+  
+  const getTimeInTimezone = (offset: number) => {
+    const utc = currentTime.getTime() + (currentTime.getTimezoneOffset() * 60000);
+    const newTime = new Date(utc + (3600000 * offset));
+    return formatTime(newTime);
+  };
+  
+  return (
+    <div className={cn("border p-8 rounded-[2rem] space-y-6 shadow-2xl", theme === 'dark' ? "bg-[#050505] border-white/10" : "bg-white border-slate-200 shadow-xl")}>
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
+          <Clock className="w-5 h-5 text-blue-500" />
+        </div>
+        <div>
+          <h3 className="text-lg font-black uppercase tracking-tight">Market Hours</h3>
+          <p className={cn("text-[10px] uppercase tracking-wider", theme === 'dark' ? "text-white/40" : "text-slate-400")}>
+            Live Session Tracker
+          </p>
+        </div>
+      </div>
+      
+      {/* Current UTC Time */}
+      <div className={cn("border rounded-xl p-4", theme === 'dark' ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-200")}>
+        <div className="text-[9px] font-black uppercase tracking-wider opacity-40 mb-1">UTC Time</div>
+        <div className="text-3xl font-black font-mono text-[#00ff9c]">{formatTime(currentTime)}</div>
+      </div>
+      
+      {/* Active Sessions */}
+      <div className="space-y-3">
+        <div className="text-[9px] font-black uppercase tracking-wider opacity-40">Active Sessions</div>
+        
+        {activeSessions.length === 0 ? (
+          <div className={cn("text-center py-6 rounded-xl border", theme === 'dark' ? "border-white/10 text-white/30" : "border-slate-200 text-slate-400")}>
+            <span className="text-sm font-bold">Markets Closed</span>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {activeSessions.map(session => (
+              <div 
+                key={session.name}
+                className={cn("border rounded-xl p-4 flex items-center justify-between transition-all", theme === 'dark' ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-200")}
+                style={{ borderLeftWidth: '4px', borderLeftColor: session.color }}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">{session.emoji}</span>
+                  <div>
+                    <div className="font-black text-sm">{session.name}</div>
+                    <div className={cn("text-[9px] uppercase tracking-wider", theme === 'dark' ? "text-white/40" : "text-slate-400")}>
+                      {Math.floor(session.start / 60)}:00 - {Math.floor(session.end / 60)}:00 UTC
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                  <span className="text-[9px] font-black uppercase tracking-wider text-green-500">Live</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      
+      {/* Overlap Alert */}
+      {overlap && (
+        <div className={cn("border-2 rounded-xl p-4", overlap.high ? "bg-[#00ff9c]/10 border-[#00ff9c]/50" : "bg-purple-500/10 border-purple-500/50")}>
+          <div className="flex items-center gap-3">
+            <Zap className={cn("w-5 h-5", overlap.high ? "text-[#00ff9c]" : "text-purple-400")} />
+            <div>
+              <div className={cn("font-black text-sm", overlap.high ? "text-[#00ff9c]" : "text-purple-400")}>
+                {overlap.name}
+              </div>
+              <div className="text-[9px] uppercase tracking-wider opacity-60">
+                {overlap.high ? '🔥 High Volatility Expected' : 'Moderate Activity'}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* World Clocks */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className={cn("border rounded-xl p-3", theme === 'dark' ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-200")}>
+          <div className="text-[8px] font-black uppercase tracking-wider opacity-40 mb-1">London</div>
+          <div className="text-sm font-mono font-bold">{getTimeInTimezone(0)}</div>
+        </div>
+        <div className={cn("border rounded-xl p-3", theme === 'dark' ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-200")}>
+          <div className="text-[8px] font-black uppercase tracking-wider opacity-40 mb-1">New York</div>
+          <div className="text-sm font-mono font-bold">{getTimeInTimezone(-5)}</div>
+        </div>
+        <div className={cn("border rounded-xl p-3", theme === 'dark' ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-200")}>
+          <div className="text-[8px] font-black uppercase tracking-wider opacity-40 mb-1">Tokyo</div>
+          <div className="text-sm font-mono font-bold">{getTimeInTimezone(9)}</div>
+        </div>
+        <div className={cn("border rounded-xl p-3", theme === 'dark' ? "bg-white/5 border-white/10" : "bg-slate-50 border-slate-200")}>
+          <div className="text-[8px] font-black uppercase tracking-wider opacity-40 mb-1">Sydney</div>
+          <div className="text-sm font-mono font-bold">{getTimeInTimezone(11)}</div>
+        </div>
+      </div>
+      
+      <div className={cn("text-center text-[9px] pt-2 border-t", theme === 'dark' ? "text-white/30 border-white/10" : "text-slate-400 border-slate-200")}>
+        💡 Best trading during London/NY overlap (13:00-17:00 UTC)
+      </div>
+    </div>
+  );
+};
+
 // Position Size Calculator Component
 const PositionSizeCalculator: React.FC<{ theme: 'dark' | 'light' }> = ({ theme }) => {
   const [accountBalance, setAccountBalance] = useState('10000');
@@ -652,7 +814,16 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
 
       if (isConfigured) {
         try {
-          const { data: { session } } = await supabase.auth.getSession();
+          // Get current session
+          const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+          
+          if (sessionError) {
+            console.error('Session error:', sessionError);
+            // Session expired or invalid - user needs to log in again
+            onLogout();
+            return;
+          }
+          
           if (session?.user) {
             setUserId(session.user.id);
             setIsSyncing(true);
@@ -666,6 +837,7 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
             
             if (profileError) {
               console.error('Error fetching profile:', profileError);
+              // Profile doesn't exist yet - user will see initial balance setup
             } else if (profile?.initial_balance) {
               setInitialBalance(profile.initial_balance);
             }
@@ -679,6 +851,7 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
             
             if (tradesError) {
               console.error('Error fetching trades:', tradesError);
+              console.error('Error details:', tradesError.message, tradesError.details, tradesError.hint);
             } else if (trades && trades.length > 0) {
               console.log(`Loaded ${trades.length} trades from database`);
               setLoggedTrades(trades);
@@ -687,6 +860,10 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
             }
             
             setLastSyncTime(new Date().toLocaleTimeString());
+          } else {
+            // No session - redirect to login
+            console.log('No active session');
+            onLogout();
           }
         } catch (e) {
           console.error('Error loading data:', e);
@@ -1135,9 +1312,22 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
     // Save to Supabase with the actual user ID
     if (isConfigured && userId) {
       try {
-        await supabase.from('trades').upsert({ ...tradeData, user_id: userId });
+        const { error } = await supabase.from('trades').upsert({ 
+          ...tradeData, 
+          user_id: userId 
+        }, {
+          onConflict: 'id'
+        });
+        
+        if (error) {
+          console.error('Error saving trade:', error);
+          alert('Failed to save trade to database. Please check your connection and try again.');
+        } else {
+          console.log('Trade saved successfully:', tradeData.id);
+        }
       } catch (e) {
         console.error('Error saving trade:', e);
+        alert('Failed to save trade. Please try again.');
       }
     }
     setActiveTab('Trades');
@@ -2077,6 +2267,9 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
           {activeTab === 'Tools' && (
             <motion.div key="tools" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-8 pb-24">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                
+                {/* Market Hours */}
+                <MarketHours theme={theme} />
                 
                 {/* Position Size Calculator */}
                 <PositionSizeCalculator theme={theme} />
