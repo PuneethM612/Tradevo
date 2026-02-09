@@ -814,21 +814,25 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
 
       if (isConfigured) {
         try {
+          console.log('🔍 Checking authentication...');
           // Get current session
           const { data: { session }, error: sessionError } = await supabase.auth.getSession();
           
           if (sessionError) {
-            console.error('Session error:', sessionError);
+            console.error('❌ Session error:', sessionError);
             // Session expired or invalid - user needs to log in again
             onLogout();
             return;
           }
           
           if (session?.user) {
+            console.log('✅ User authenticated:', session.user.email);
+            console.log('👤 User ID:', session.user.id);
             setUserId(session.user.id);
             setIsSyncing(true);
             
             // Fetch user profile with initial balance
+            console.log('📊 Fetching profile...');
             const { data: profile, error: profileError } = await supabase
               .from('profiles')
               .select('initial_balance')
@@ -836,13 +840,18 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
               .single();
             
             if (profileError) {
-              console.error('Error fetching profile:', profileError);
+              console.error('❌ Error fetching profile:', profileError);
+              console.error('Profile error details:', profileError.message, profileError.details, profileError.hint);
               // Profile doesn't exist yet - user will see initial balance setup
             } else if (profile?.initial_balance) {
+              console.log('✅ Profile loaded. Initial balance:', profile.initial_balance);
               setInitialBalance(profile.initial_balance);
+            } else {
+              console.log('⚠️ Profile exists but no initial balance set');
             }
             
             // Fetch user's trades
+            console.log('📈 Fetching trades...');
             const { data: trades, error: tradesError } = await supabase
               .from('trades')
               .select('*')
@@ -850,23 +859,55 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
               .order('timestamp', { ascending: false });
             
             if (tradesError) {
-              console.error('Error fetching trades:', tradesError);
-              console.error('Error details:', tradesError.message, tradesError.details, tradesError.hint);
+              console.error('❌ Error fetching trades:', tradesError);
+              console.error('Trades error details:', tradesError.message, tradesError.details, tradesError.hint);
+              console.error('Error code:', tradesError.code);
             } else if (trades && trades.length > 0) {
-              console.log(`Loaded ${trades.length} trades from database`);
-              setLoggedTrades(trades);
+              console.log(`✅ Loaded ${trades.length} trades from database`);
+              // Map snake_case from database to camelCase for app
+              const mappedTrades = trades.map((t: any) => ({
+                id: t.id,
+                timestamp: t.timestamp,
+                displayDate: t.displaydate || t.displayDate,
+                symbol: t.symbol,
+                assetClass: t.assetclass || t.assetClass,
+                type: t.type,
+                lots: t.lots,
+                entry: t.entry,
+                sl: t.sl,
+                tp: t.tp,
+                rr: t.rr,
+                pips: t.pips,
+                profit: t.profit,
+                rating: t.rating,
+                analysis: t.analysis,
+                screenshot: t.screenshot,
+                emotions: t.emotions || [],
+                preMarketAnalysis: t.premarketanalysis || t.preMarketAnalysis || '',
+                postMarketAnalysis: t.postmarketanalysis || t.postMarketAnalysis || '',
+                session: t.session,
+                preChecklist: t.prechecklist || t.preChecklist || false,
+                tags: t.tags || [],
+                mistakes: t.mistakes || [],
+                lessonsLearned: t.lessonslearned || t.lessonsLearned || '',
+                wouldDoDifferently: t.woulddodifferently || t.wouldDoDifferently || '',
+                entryTime: t.entrytime || t.entryTime,
+                exitTime: t.exittime || t.exitTime || ''
+              }));
+              console.log('First trade:', mappedTrades[0]);
+              setLoggedTrades(mappedTrades);
             } else {
-              console.log('No trades found in database');
+              console.log('⚠️ No trades found in database');
             }
             
             setLastSyncTime(new Date().toLocaleTimeString());
           } else {
             // No session - redirect to login
-            console.log('No active session');
+            console.log('❌ No active session');
             onLogout();
           }
         } catch (e) {
-          console.error('Error loading data:', e);
+          console.error('❌ Error loading data:', e);
         } finally { 
           setIsSyncing(false); 
         }
@@ -1303,6 +1344,7 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
       exitTime: ''
     };
 
+    // Update UI immediately
     const newTrades = editingId 
       ? loggedTrades.map(t => t.id === editingId ? { ...t, ...tradeData } : t) 
       : [tradeData, ...loggedTrades];
@@ -1312,24 +1354,68 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
     // Save to Supabase with the actual user ID
     if (isConfigured && userId) {
       try {
-        const { error } = await supabase.from('trades').upsert({ 
-          ...tradeData, 
-          user_id: userId 
-        }, {
+        console.log('💾 Saving trade to database...');
+        console.log('Trade ID:', tradeData.id);
+        console.log('User ID:', userId);
+        
+        // Map camelCase to snake_case for database
+        const dbTrade = {
+          id: tradeData.id,
+          user_id: userId,
+          timestamp: tradeData.timestamp,
+          displaydate: tradeData.displayDate,
+          symbol: tradeData.symbol,
+          assetclass: tradeData.assetClass,
+          type: tradeData.type,
+          lots: tradeData.lots,
+          entry: tradeData.entry,
+          sl: tradeData.sl,
+          tp: tradeData.tp,
+          rr: tradeData.rr,
+          pips: tradeData.pips,
+          profit: tradeData.profit,
+          rating: tradeData.rating,
+          analysis: tradeData.analysis,
+          screenshot: tradeData.screenshot,
+          emotions: tradeData.emotions,
+          premarketanalysis: tradeData.preMarketAnalysis,
+          postmarketanalysis: tradeData.postMarketAnalysis,
+          session: tradeData.session,
+          prechecklist: tradeData.preChecklist,
+          tags: tradeData.tags,
+          mistakes: tradeData.mistakes,
+          lessonslearned: tradeData.lessonsLearned,
+          woulddodifferently: tradeData.wouldDoDifferently,
+          entrytime: tradeData.entryTime,
+          exittime: tradeData.exitTime
+        };
+        
+        const { data, error } = await supabase.from('trades').upsert(dbTrade, {
           onConflict: 'id'
         });
         
         if (error) {
-          console.error('Error saving trade:', error);
-          alert('Failed to save trade to database. Please check your connection and try again.');
+          console.error('❌ Error saving trade:', error);
+          console.error('Error message:', error.message);
+          console.error('Error details:', error.details);
+          console.error('Error hint:', error.hint);
+          console.error('Error code:', error.code);
+          alert(`Failed to save trade to database: ${error.message}\n\nPlease check the console for details.`);
         } else {
-          console.log('Trade saved successfully:', tradeData.id);
+          console.log('✅ Trade saved successfully to database!');
+          console.log('Response:', data);
         }
-      } catch (e) {
-        console.error('Error saving trade:', e);
-        alert('Failed to save trade. Please try again.');
+      } catch (e: any) {
+        console.error('❌ Exception while saving trade:', e);
+        console.error('Exception message:', e.message);
+        alert(`Failed to save trade: ${e.message}`);
       }
+    } else {
+      console.warn('⚠️ Cannot save trade - Supabase not configured or no user ID');
+      console.log('isConfigured:', isConfigured);
+      console.log('userId:', userId);
     }
+    
     setActiveTab('Trades');
     resetForm();
   };
@@ -1379,10 +1465,29 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
     const nt = loggedTrades.map(t => t.id === id ? { ...t, ...updates } : t);
     setLoggedTrades(nt);
     
-    // Save to Supabase
+    // Save to Supabase - map camelCase to snake_case
     if (isConfigured && userId) {
       try {
-        await supabase.from('trades').update(updates).eq('id', id).eq('user_id', userId);
+        const dbUpdates: any = {};
+        if (updates.displayDate) dbUpdates.displaydate = updates.displayDate;
+        if (updates.assetClass) dbUpdates.assetclass = updates.assetClass;
+        if (updates.preMarketAnalysis !== undefined) dbUpdates.premarketanalysis = updates.preMarketAnalysis;
+        if (updates.postMarketAnalysis !== undefined) dbUpdates.postmarketanalysis = updates.postMarketAnalysis;
+        if (updates.preChecklist !== undefined) dbUpdates.prechecklist = updates.preChecklist;
+        if (updates.lessonsLearned !== undefined) dbUpdates.lessonslearned = updates.lessonsLearned;
+        if (updates.wouldDoDifferently !== undefined) dbUpdates.woulddodifferently = updates.wouldDoDifferently;
+        if (updates.entryTime) dbUpdates.entrytime = updates.entryTime;
+        if (updates.exitTime) dbUpdates.exittime = updates.exitTime;
+        
+        // Copy over simple fields
+        const simpleFields = ['symbol', 'type', 'lots', 'entry', 'sl', 'tp', 'rr', 'pips', 'profit', 'rating', 'analysis', 'screenshot', 'emotions', 'session', 'tags', 'mistakes'];
+        simpleFields.forEach(field => {
+          if (updates[field as keyof TradeLog] !== undefined) {
+            dbUpdates[field] = updates[field as keyof TradeLog];
+          }
+        });
+        
+        await supabase.from('trades').update(dbUpdates).eq('id', id).eq('user_id', userId);
       } catch (e) {
         console.error('Error updating trade:', e);
       }
