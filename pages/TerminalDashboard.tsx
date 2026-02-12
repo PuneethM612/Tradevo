@@ -560,11 +560,21 @@ const EconomicCalendar: React.FC<{ theme: 'dark' | 'light' }> = ({ theme }) => {
         // Use local proxy to avoid CORS issues
         let response;
         let data;
-        response = await fetch('http://localhost:3005/api/economic-calendar');
-        if (!response.ok) {
-          throw new Error('Failed to fetch calendar data');
+        
+        // Try to fetch from API - this will likely fail without a backend
+        try {
+          response = await fetch('/api/economic-calendar');
+          if (response.ok) {
+            data = await response.json();
+          } else {
+            throw new Error('API not available');
+          }
+        } catch (apiError) {
+          // API not available - use fallback data
+          console.log('Economic calendar API not available, using fallback data');
+          throw new Error('Using fallback data');
         }
-        data = await response.json();
+        
         // Check if we got an error message
         if (data.error || data.Error || data['Error Message']) {
           throw new Error(data.error || data.Error || data['Error Message']);
@@ -609,7 +619,7 @@ const EconomicCalendar: React.FC<{ theme: 'dark' | 'light' }> = ({ theme }) => {
         setError(null);
       } catch (err) {
         console.error('Error fetching economic calendar:', err);
-        setError('Unable to fetch live data. Showing cached events.');
+        setError('Showing sample events. Connect API for live data.');
         
         // Try to use expired cache as fallback
         if (cachedData) {
@@ -620,11 +630,15 @@ const EconomicCalendar: React.FC<{ theme: 'dark' | 'light' }> = ({ theme }) => {
           } catch (e) {}
         }
         
-        // Last resort fallback
+        // Last resort fallback - show upcoming week's typical events
+        const today = new Date();
         const fallbackEvents: EconomicEvent[] = [
-          { id: '1', title: 'Core Retail Sales m/m', country: 'US', currency: 'USD', impact: 'high', date: getNextWeekday(2), time: '13:30', forecast: '0.4%', previous: '0.5%' },
-          { id: '2', title: 'CPI m/m', country: 'US', currency: 'USD', impact: 'high', date: getNextWeekday(3), time: '13:30', forecast: '0.3%', previous: '0.3%' },
-          { id: '3', title: 'Unemployment Claims', country: 'US', currency: 'USD', impact: 'high', date: getNextWeekday(4), time: '13:30', forecast: '220K', previous: '225K' },
+          { id: '1', title: 'Non-Farm Payrolls', country: 'US', currency: 'USD', impact: 'high', date: getNextWeekday(5), time: '13:30', forecast: '180K', previous: '175K' },
+          { id: '2', title: 'Core Retail Sales m/m', country: 'US', currency: 'USD', impact: 'high', date: getNextWeekday(2), time: '13:30', forecast: '0.4%', previous: '0.5%' },
+          { id: '3', title: 'CPI m/m', country: 'US', currency: 'USD', impact: 'high', date: getNextWeekday(3), time: '13:30', forecast: '0.3%', previous: '0.3%' },
+          { id: '4', title: 'FOMC Statement', country: 'US', currency: 'USD', impact: 'high', date: getNextWeekday(3), time: '19:00', forecast: '', previous: '' },
+          { id: '5', title: 'Unemployment Claims', country: 'US', currency: 'USD', impact: 'high', date: getNextWeekday(4), time: '13:30', forecast: '220K', previous: '225K' },
+          { id: '6', title: 'GDP q/q', country: 'UK', currency: 'GBP', impact: 'high', date: getNextWeekday(4), time: '07:00', forecast: '0.2%', previous: '0.1%' },
         ];
         setEvents(fallbackEvents);
       } finally {
@@ -807,7 +821,8 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
     date: new Date().toISOString().split('T')[0],
     screenshot: null as string | null,
     tags: [] as string[],
-    exitType: 'TP' as 'TP' | 'SL' // New field to track if trade hit TP or SL
+    exitType: 'TP' as 'TP' | 'SL', // New field to track if trade hit TP or SL
+    manualProfit: '' // Manual profit override
   });
 
   const [userId, setUserId] = useState<string | null>(null);
@@ -966,7 +981,23 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
 
   const calculations = useMemo(() => {
     const entry = parseFloat(form.entry), sl = parseFloat(form.sl), tp = parseFloat(form.tp), lots = parseFloat(form.lots);
-    if (!entry || !sl || !tp) return { rr: "0.00", profit: "0.00" };
+    
+    // If manual profit is set, use that instead
+    if (form.manualProfit && form.manualProfit.trim() !== '') {
+      const manualValue = parseFloat(form.manualProfit);
+      if (!isNaN(manualValue)) {
+        const risk = Math.abs(entry - sl);
+        const reward = Math.abs(tp - entry);
+        const rr = risk === 0 ? "0.00" : (reward / risk).toFixed(2);
+        return { 
+          rr, 
+          profit: manualValue.toFixed(2),
+          isManual: true
+        };
+      }
+    }
+    
+    if (!entry || !sl || !tp) return { rr: "0.00", profit: "0.00", isManual: false };
     
     const risk = Math.abs(entry - sl);
     const reward = Math.abs(tp - entry);
@@ -983,19 +1014,70 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
       profitValue = entry - exitPrice; // Positive if TP hit, negative if SL hit
     }
     
-    let multiplier = 1;
-    if (form.assetClass === 'FOREX') multiplier = 10000;
-    else if (form.assetClass === 'COMMODITIES') multiplier = 100;
-    else if (form.assetClass === 'FUTURES') multiplier = 10;
-    else if (form.assetClass === 'CRYPTO') multiplier = 1;
-
-    const finalProfit = profitValue * multiplier * lots;
+    // Calculate pip value and profit based on asset class
+    let finalProfit = 0;
+    
+    if (form.assetClass === 'FOREX') {
+      // For forex, calculate pips based on the pair
+      let pipMultiplier = 0.0001; // Standard for most pairs (4 decimal places)
+      
+      // JPY pairs use 2 decimal places (0.01 = 1 pip)
+      if (form.symbol.includes('JPY')) {
+        pipMultiplier = 0.01;
+      }
+      
+      // Calculate pips
+      const pips = profitValue / pipMultiplier;
+      
+      // Pip value calculation varies by pair:
+      // For XXX/USD pairs: 1 pip = $10 per standard lot
+      // For USD/XXX pairs: 1 pip = $10 / exchange rate per standard lot
+      // For cross pairs (no USD): more complex calculation
+      
+      let pipValuePerLot = 10; // Default for USD pairs
+      
+      // For JPY pairs (e.g., GBPJPY, EURJPY, USDJPY)
+      // Pip value = (0.01 / current price) × 100,000 (lot size)
+      // Approximation: For XXXJPY pairs at ~200 price level: ~$5-7 per pip
+      if (form.symbol.includes('JPY')) {
+        // More accurate calculation for JPY pairs
+        // For GBPJPY at 209: pip value ≈ (0.01 / 209) × 100,000 ≈ $4.78
+        // But this varies with price, so we use a reasonable average
+        if (form.symbol.startsWith('USD')) {
+          // USDJPY: pip value = (0.01 / price) × 100,000
+          pipValuePerLot = entry > 0 ? (0.01 / entry) * 100000 : 10;
+        } else {
+          // Cross JPY pairs (GBPJPY, EURJPY, etc.)
+          // Approximate pip value considering typical exchange rates
+          pipValuePerLot = entry > 0 ? (0.01 / entry) * 100000 : 6.5;
+        }
+      }
+      
+      finalProfit = pips * pipValuePerLot * lots;
+      
+    } else if (form.assetClass === 'COMMODITIES') {
+      // Gold (XAUUSD): 1 lot = 100 oz, $1 move = $100
+      // Silver (XAGUSD): 1 lot = 5000 oz, $1 move = $5000
+      let multiplier = 100;
+      if (form.symbol === 'XAGUSD') multiplier = 5000;
+      finalProfit = profitValue * multiplier * lots;
+      
+    } else if (form.assetClass === 'FUTURES') {
+      // Indices: 1 point = $1 per contract typically
+      const multiplier = 1;
+      finalProfit = profitValue * multiplier * lots;
+      
+    } else if (form.assetClass === 'CRYPTO') {
+      // Crypto: Direct price difference
+      finalProfit = profitValue * lots;
+    }
 
     return { 
       rr, 
-      profit: finalProfit.toFixed(2) 
+      profit: finalProfit.toFixed(2),
+      isManual: false
     };
-  }, [form.entry, form.sl, form.tp, form.lots, form.assetClass, form.type, form.exitType]);
+  }, [form.entry, form.sl, form.tp, form.lots, form.assetClass, form.type, form.exitType, form.symbol, form.manualProfit]);
 
   const stats = useMemo(() => {
     const totalTrades = loggedTrades.length;
@@ -1481,7 +1563,7 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
   const resetForm = () => {
     setForm({
       symbol: 'XAUUSD', assetClass: 'COMMODITIES', type: 'LONG', lots: '0.10', entry: '', sl: '', tp: '',
-      analysis: '', date: new Date().toISOString().split('T')[0], screenshot: null, tags: [], exitType: 'TP'
+      analysis: '', date: new Date().toISOString().split('T')[0], screenshot: null, tags: [], exitType: 'TP', manualProfit: ''
     });
     setEditingId(null);
   };
@@ -2370,10 +2452,6 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
                         </div>
                      </div>
                   </div>
-                  <div className={cn("border p-12 rounded-[3rem] space-y-10 shadow-2xl", theme === 'dark' ? "bg-[#050505] border-white/5" : "bg-white border-slate-200 shadow-xl")}>
-                     <div className="flex items-center gap-3"><FileText className="w-4 h-4 text-[#00ff9c]" /><span className="text-[10px] font-black uppercase tracking-[0.4em]">Strategic Logic</span></div>
-                     <textarea value={form.analysis} onChange={e => setForm({...form, analysis: e.target.value})} placeholder="Document the edge logic..." className={cn("w-full h-40 border rounded-2xl p-6 text-sm italic outline-none resize-none shadow-sm", theme === 'dark' ? "bg-white/5 border-white/10 text-white/70" : "bg-slate-50 border-slate-200")} />
-                  </div>
 
                   {/* Tags Section */}
                   <div className={cn("border p-12 rounded-[3rem] space-y-6 shadow-2xl", theme === 'dark' ? "bg-[#050505] border-white/5" : "bg-white border-slate-200 shadow-xl")}>
@@ -2450,8 +2528,48 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
                      <div className="space-y-8">
                         <div className="flex items-center gap-3 text-[#00ff9c]"><TrendingUp className="w-5 h-5" /><span className="text-[11px] font-black uppercase tracking-[0.5em]">Prediction Model</span></div>
                         <div className="grid grid-cols-2 gap-8">
-                           <SummaryDetail label="EST_ALPHA" value={`$${calculations.profit}`} highlight theme={theme} />
+                           <div className="space-y-2">
+                             <SummaryDetail label="EST_ALPHA" value={`$${calculations.profit}`} highlight theme={theme} />
+                             {calculations.isManual && (
+                               <div className="flex items-center gap-1 text-[8px] text-amber-500 font-bold">
+                                 <Pencil className="w-3 h-3" />
+                                 Manual Override
+                               </div>
+                             )}
+                           </div>
                            <SummaryDetail label="RATIO_RR" value={`1:${calculations.rr}`} theme={theme} />
+                        </div>
+                        
+                        {/* Manual P&L Override */}
+                        <div className="space-y-3 pt-4 border-t border-white/10">
+                          <label className="text-[9px] uppercase tracking-[0.3em] font-black opacity-30 ml-2 flex items-center gap-2">
+                            <Pencil className="w-3 h-3" />
+                            Manual P&L Adjustment
+                          </label>
+                          <div className="flex gap-3 items-center">
+                            <input
+                              type="number"
+                              step="0.01"
+                              placeholder="Leave empty for auto-calc"
+                              value={form.manualProfit}
+                              onChange={e => setForm({...form, manualProfit: e.target.value})}
+                              className={cn("flex-1 border rounded-xl px-4 py-3 text-sm font-mono font-bold outline-none shadow-sm", 
+                                theme === 'dark' ? "bg-white/5 border-white/10" : "bg-white border-slate-200"
+                              )}
+                            />
+                            {form.manualProfit && (
+                              <button
+                                onClick={() => setForm({...form, manualProfit: ''})}
+                                className="p-3 rounded-xl bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-all"
+                                title="Clear manual override"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                          <p className="text-[8px] opacity-40 italic ml-2">
+                            💡 Use this to match your broker's exact P&L (accounts for spread, commission, etc.)
+                          </p>
                         </div>
                      </div>
                      <button onClick={commitTrade} className="w-full bg-[#00ff9c] text-black py-6 rounded-2xl font-black uppercase italic tracking-[0.3em] text-[12px] hover:shadow-[0_0_50px_rgba(0,255,156,0.3)] hover:scale-[1.02] transition-all">
