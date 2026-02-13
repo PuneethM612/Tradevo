@@ -1478,6 +1478,21 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
     const now = new Date();
     if (tradeDate.toDateString() === now.toDateString()) tradeDate.setHours(now.getHours(), now.getMinutes());
 
+    // Determine session based on UTC time
+    const utcHours = now.getUTCHours();
+    let session: 'LONDON' | 'NY' | 'ASIA' | 'OVERLAP' = 'LONDON';
+    
+    // Check for overlaps first (more specific)
+    if (utcHours >= 13 && utcHours < 17) {
+      session = 'OVERLAP'; // London/NY overlap (13:00-17:00 UTC)
+    } else if (utcHours >= 8 && utcHours < 13) {
+      session = 'LONDON'; // London only (8:00-13:00 UTC)
+    } else if (utcHours >= 17 && utcHours < 22) {
+      session = 'NY'; // NY only (17:00-22:00 UTC)
+    } else {
+      session = 'ASIA'; // Asian session (22:00-8:00 UTC)
+    }
+
     const tradeData: TradeLog = {
       id: editingId || `TRD-${Math.floor(Math.random() * 90000 + 10000)}`,
       timestamp: tradeDate.toISOString(),
@@ -1498,7 +1513,7 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
       emotions: [],
       preMarketAnalysis: '',
       postMarketAnalysis: '',
-      session: 'LONDON',
+      session: session,
       preChecklist: false,
       tags: form.tags,
       mistakes: [],
@@ -2147,6 +2162,7 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
                     <span className="text-[10px] font-black uppercase tracking-[0.4em] text-purple-400">AI Performance Insights</span>
                   </div>
                   <div className="grid md:grid-cols-3 gap-6">
+                    {/* Best Performing Setup */}
                     <div className={cn("p-6 rounded-2xl border", theme === 'dark' ? "bg-[#00ff9c]/5 border-[#00ff9c]/20" : "bg-green-50 border-green-200")}>
                       <div className="flex items-center gap-2 mb-3">
                         <TrendingUp className="w-4 h-4 text-[#00ff9c]" />
@@ -2176,6 +2192,7 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
                       })()}
                     </div>
 
+                    {/* Biggest Leak */}
                     <div className={cn("p-6 rounded-2xl border", theme === 'dark' ? "bg-red-500/5 border-red-500/20" : "bg-red-50 border-red-200")}>
                       <div className="flex items-center gap-2 mb-3">
                         <AlertTriangle className="w-4 h-4 text-red-500" />
@@ -2196,6 +2213,7 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
                       })()}
                     </div>
 
+                    {/* Best Trading Time */}
                     <div className={cn("p-6 rounded-2xl border", theme === 'dark' ? "bg-blue-500/5 border-blue-500/20" : "bg-blue-50 border-blue-200")}>
                       <div className="flex items-center gap-2 mb-3">
                         <Clock className="w-4 h-4 text-blue-400" />
@@ -2217,6 +2235,7 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
                     </div>
                   </div>
 
+                  {/* AI Recommendation */}
                   <div className={cn("mt-6 p-4 rounded-xl border", theme === 'dark' ? "bg-white/5 border-white/10" : "bg-white border-slate-200")}>
                     <div className="flex items-start gap-3">
                       <Lightbulb className="w-4 h-4 text-yellow-500 mt-0.5 flex-shrink-0" />
@@ -2246,6 +2265,7 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
 
               {/* Top Performing Setups & Day Performance */}
               <div className="grid lg:grid-cols-2 gap-8">
+                 {/* Top Performing Setups */}
                  <div className={cn("border rounded-[3rem] p-10 shadow-2xl", theme === 'dark' ? "bg-[#050505] border-white/5" : "bg-white border-slate-200")}>
                     <span className="text-[10px] font-black uppercase tracking-[0.4em] opacity-30 mb-6 block">Top Performing Setups</span>
                     <div className="space-y-4">
@@ -2282,6 +2302,7 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
                     </div>
                  </div>
 
+                 {/* Day Performance */}
                  <div className={cn("border rounded-[3rem] p-10 shadow-2xl", theme === 'dark' ? "bg-[#050505] border-white/5" : "bg-white border-slate-200")}>
                     <span className="text-[10px] font-black uppercase tracking-[0.4em] opacity-30 mb-6 block">Day of Week Performance</span>
                     <div className="h-[280px]">
@@ -2302,6 +2323,7 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
 
               {/* Biggest Leaks & Streaks */}
               <div className="grid lg:grid-cols-2 gap-8">
+                {/* Biggest Leaks */}
                 <div className={cn("border rounded-[3rem] p-10 shadow-2xl", theme === 'dark' ? "bg-[#050505] border-red-500/10" : "bg-white border-slate-200")}>
                   <span className="text-[10px] font-black uppercase tracking-[0.4em] text-red-500 mb-6 block">Biggest Leaks</span>
                   <div className="space-y-4">
@@ -2334,6 +2356,7 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
                   </div>
                 </div>
 
+                {/* Streak Stats */}
                 <div className={cn("border rounded-[3rem] p-10 shadow-2xl", theme === 'dark' ? "bg-[#050505] border-white/5" : "bg-white border-slate-200")}>
                   <span className="text-[10px] font-black uppercase tracking-[0.4em] opacity-30 mb-6 block">Streak Statistics</span>
                   <div className="grid grid-cols-2 gap-6">
@@ -2364,7 +2387,7 @@ const TerminalDashboard: React.FC<TerminalDashboardProps> = ({ onLogout }) => {
               </div>
 
 
-              {/* Calendar */}
+              {/* Calendar */
               <div className={cn("border rounded-[3rem] p-10 shadow-2xl", theme === 'dark' ? "bg-[#050505] border-white/5" : "bg-white border-slate-200 shadow-xl")}>
                  <span className={cn("text-[10px] uppercase tracking-[0.4em] font-black mb-8 block opacity-30")}>Monthly Alpha Density Heatmap</span>
                  <PerformanceCalendar loggedTrades={loggedTrades} theme={theme} mini />
